@@ -163,6 +163,30 @@ async function run() {
         };
 
         const result = await ordersCollection.insertOne(order);
+
+        // After inserting the order, decrement stock for each ordered item
+        const items = req.body.items || [];
+        for (const item of items) {
+          try {
+            const id = item._id || item.id || item.foodId;
+            const qty = parseInt(item.quantity || item.qty || 1, 10) || 1;
+            if (!id) continue;
+
+            const food = await foodsCollection.findOne({ _id: new ObjectId(id) });
+            if (!food) continue;
+
+            const currentStock = parseInt(food.stock || 0, 10);
+            const newStock = Math.max(0, currentStock - qty);
+
+            await foodsCollection.updateOne(
+              { _id: new ObjectId(id) },
+              { $set: { stock: newStock } }
+            );
+          } catch (innerErr) {
+            console.error('Error decrementing stock for item:', item, innerErr.message);
+          }
+        }
+
         res.json({ _id: result.insertedId, ...order });
       } catch (err) {
         res.status(500).json({ error: err.message });
